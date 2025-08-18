@@ -8,13 +8,25 @@
     # ghostty = {
     #   url = "github:ghostty-org/ghostty";
     # };
+    nix-homebrew.url = "github:zhaofengli/nix-homebrew";
+    homebrew-core = {
+      url = "github:homebrew/homebrew-core";
+      flake = false;
+    };
+    homebrew-cask = {
+      url = "github:homebrew/homebrew-cask";
+      flake = false;
+    };
 };
 
   outputs = inputs@{
     self,
     nix-darwin,
     nixpkgs,
-    # ghostty
+    # ghostty,
+    nix-homebrew,
+    homebrew-core,
+    homebrew-cask
   }:
   let
     configuration = { pkgs, config, ... }: {
@@ -64,15 +76,52 @@
       # $ darwin-rebuild changelog
       system.stateVersion = 6;
 
+      system.primaryUser = "braden";
+
       # The platform the configuration will be used on.
       nixpkgs.hostPlatform = "aarch64-darwin";
+
+      homebrew = {
+        enable = true;
+	onActivation.cleanup = "zap";
+      };
     };
   in
   {
     # Build darwin flake using:
     # $ darwin-rebuild build --flake .#Bradens-MacBook-Air
     darwinConfigurations."Bradens-MacBook-Air" = nix-darwin.lib.darwinSystem {
-      modules = [ configuration ];
+      modules = [
+        configuration
+	nix-homebrew.darwinModules.nix-homebrew
+	{
+          nix-homebrew = {
+            # Install Homebrew under the default prefix
+            enable = true;
+
+            # Apple Silicon Only: Also install Homebrew under the default Intel prefix for Rosetta 2
+            enableRosetta = true;
+
+            # User owning the Homebrew prefix
+            user = "braden";
+
+            # Optional: Declarative tap management
+            taps = {
+              "homebrew/homebrew-core" = homebrew-core;
+              "homebrew/homebrew-cask" = homebrew-cask;
+            };
+
+            # Optional: Enable fully-declarative tap management
+            #
+            # With mutableTaps disabled, taps can no longer be added imperatively with `brew tap`.
+            mutableTaps = false;
+          };
+        }
+        # Optional: Align homebrew taps config with nix-homebrew
+        ({config, ...}: {
+          homebrew.taps = builtins.attrNames config.nix-homebrew.taps;
+        })
+      ];
     };
   };
 }
